@@ -16,10 +16,9 @@ def sampling(args):
     return z_mean + K.exp(z_log_sigma) * epsilon
 
 class CustomVAE():
-    def __init__(self, encoder_path=None, base_dir='my_models/models', act='swish', init='glorot_uniform'):
+    def __init__(self, base_dir='my_models/models', act='swish', init='glorot_uniform'):
         self.act = act
         self.init = init
-        self.encoder = encoder_path
         self.base_dir = base_dir
 
     def build_autoencoder(self, dims, act=None, init=None):
@@ -86,24 +85,38 @@ class CustomVAE():
 
         return vae, encoder
     
-    def apply(self, df, to_forecast, out_steps, latent_dim=5, train_again=False):
-        columns_to_keep = [f"{to_forecast}_future{i}" for i in range(1, out_steps+1)] + ['hour', 'day_type']
+    def fit(self, df, to_forecast, lookback, out_steps, latent_dim=5, train_again=False):
+        columns_to_keep = [f"{to_forecast}_future{i}" for i in range(1, out_steps+1)] + ['Hour', 'Day Type']
+        self.to_forecast = to_forecast
+        self.out_steps = out_steps
+        self.latent_dim = latent_dim
         
         df_keep = df[columns_to_keep]
         df_reduce = df.drop(columns_to_keep, axis=1)
 
-        if self.encoder is None or train_again:
+        encoder_path = f'{self.base_dir}/encoder_{to_forecast.replace("/", "")}_l{lookback}_f{out_steps}.keras'
+
+        if train_again:
             print('-> Training encoder...')
             xs = df_reduce
             dims = [xs.shape[-1], 64, 32, latent_dim]
-            autoencoder, encoder = self.build_autoencoder(dims)
+            autoencoder, self.encoder = self.build_autoencoder(dims)
             autoencoder.fit(xs, xs, batch_size=64, epochs=2000, verbose=0, callbacks=[TqdmCallback(verbose=0),
                     EarlyStopping(monitor='loss', patience=10, verbose=0)])
-            encoder.save(f'{self.base_dir}/encoder_{to_forecast}.keras')
+            self.encoder.save(encoder_path)
         else:
-            print('-> Loading encoder from: {}'.format(self.encoder))
-            encoder = tf.keras.models.load_model(self.encoder, safe_mode=False)
+            print('-> Loading encoder from: {}'.format(encoder_path))
+            self.encoder = tf.keras.models.load_model(encoder_path, safe_mode=False)
             xs = df_reduce
 
-        reduced_df = pd.DataFrame(encoder.predict(xs)[-1], columns=['Z{}'.format(i) for i in range(latent_dim)])
+        reduced_df = pd.DataFrame(self.encoder.predict(xs)[-1], columns=['Z{}'.format(i) for i in range(latent_dim)])
+        return pd.concat([df_keep, reduced_df], axis=1)
+    
+    def predict(self, df):
+        columns_to_keep = [f"{self.to_forecast}_future{i}" for i in range(1, self.out_steps+1)] + ['Hour', 'Day Type']
+        
+        df_keep = df[columns_to_keep]
+        df_reduce = df.drop(columns_to_keep, axis=1)
+        
+        reduced_df = pd.DataFrame(self.encoder.predict(df_reduce)[-1], columns=['Z{}'.format(i) for i in range(self.latent_dim)])
         return pd.concat([df_keep, reduced_df], axis=1)
