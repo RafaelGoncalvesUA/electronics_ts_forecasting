@@ -16,15 +16,13 @@ if os.path.exists("out.csv"):
 if os.path.exists("ignore.csv"):
     os.remove("ignore.csv")
 
+
 header = "var,input,model,lookback,forecast,mse,timestamp\n"
 with open("out.csv", "w") as f:
     f.write(header)
 
 NUM_BUILDINGS = 6
 
-def custom_error_handler(e):
-    print(f"Error: {e}")
-    exit(1)
 
 def run_job(data_path, results_path, model, lb, fc, red, is_global):
     print(f"Running {model} with lookback {lb}, forecast {fc}, and reduction {red}")
@@ -39,6 +37,7 @@ def run_job(data_path, results_path, model, lb, fc, red, is_global):
     os.system(command)
 
 total_start = perf_counter()
+
 
 for mode in [("global", 0), ("global", -1), ("global", 1), ("local", 0)]:
     print(f"Training {mode[0].capitalize()} model with mode {mode[1]}")
