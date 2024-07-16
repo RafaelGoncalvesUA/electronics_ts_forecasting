@@ -1,5 +1,4 @@
 import multiprocessing
-from joblib import Parallel, delayed
 import os
 from itertools import product
 from time import perf_counter
@@ -17,21 +16,27 @@ if os.path.exists("ignore.csv"):
     os.remove("ignore.csv")
 
 
-header = "var,input,model,lookback,forecast,mse,timestamp\n"
+header = "var,input,model,lookback,forecast,mse,train_time,inf_time\n"
 with open("out.csv", "w") as f:
     f.write(header)
 
 NUM_BUILDINGS = 6
 
 
+def custom_error_handler(e):
+    print(f"Error: {e}")
+    exit(1)
+
+
 def run_job(data_path, results_path, model, lb, fc, red, is_global):
     print(f"Running {model} with lookback {lb}, forecast {fc}, and reduction {red}")
     
     red_method = f"-r {red}" if red else ""
+    model_args = f"-a {model[1]}" if len(model) > 1 else ""
     is_global_flag = "-g " if is_global else ""
     
     command = f"python3 run.py -d data/preprocessed/{data_path[0]} -t data/preprocessed/{data_path[1]} {is_global_flag}-f {data_path[2]} "
-    command += f"-o {results_path} -m {model} -l {lb} -w {fc} {red_method}"
+    command += f"-o {results_path} -m {model[0]} -l {lb} -w {fc} {model_args} {red_method}"
     
     print(command)
     os.system(command)
@@ -64,18 +69,24 @@ for mode in [("global", 0), ("global", -1), ("global", 1), ("local", 0)]:
         out_file = "out.csv"
         is_global = False # because we are fine tuning the global model for each building
 
-    models = ["ann"]
-    lookback = [48]
-    forecast = [1]
-    reduction = ["vae"]
+    models =  [("ann",)]
 
-    # get number of available logical CPUs
-    num_cpus = multiprocessing.cpu_count()
-    
-    Parallel(n_jobs=num_cpus)(
-        delayed(run_job)(data, out_file, model, lb, fc, red, is_global)
-        for data, model, lb, fc, red in product(datasets, models, lookback, forecast, reduction)
-    )
+    lstm_units = [64, 128]
+    dropout = [0.1, 0.2]
+    recurrent_dropout = [0.1, 0.2]
+    lstm_args = list(product(lstm_units, dropout, recurrent_dropout))
+    models += [("lstm", f"{conf[0]},{conf[1]},{conf[2]}") for conf in lstm_args]
+
+    cnn_units = [64, 128, 256]
+    models += [("cnn", conf) for conf in cnn_units]
+
+    lookback = [24, 48, 96]
+    forecast = [1, 3, 5]
+    reduction = ["vae", "pca", None]
+
+    # run jobs in parallel
+    for data_path, model, lb, fc, red in product(datasets, models, lookback, forecast, reduction):
+        run_job(data_path, out_file, model, lb, fc, red, is_global)
 
     end = perf_counter()
     print(f"Elapsed time: {end - start:.2f} seconds")
