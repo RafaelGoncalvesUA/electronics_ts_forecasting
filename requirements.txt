@@ -1,4 +1,4 @@
 keras
 pandas
 numpy
-sklearn
+scikit-learn
