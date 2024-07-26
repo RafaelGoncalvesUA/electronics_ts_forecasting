@@ -1,3 +1,4 @@
 keras
-lazypredict
-xgboost
+pandas
+numpy
+sklearn

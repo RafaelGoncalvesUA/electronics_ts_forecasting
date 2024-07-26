@@ -3,7 +3,6 @@ import numpy as np
 from sklearn.preprocessing import StandardScaler
 from sklearn.metrics import mean_absolute_error
 from sklearn.model_selection import train_test_split
-from lazypredict.Supervised import LazyRegressor, REGRESSORS
 
 import warnings
 warnings.filterwarnings("ignore")
@@ -243,51 +242,10 @@ def tf_model(model_filename, X_train, X_test, Y_train, Y_test, model_type):
 
     return mse, model_type, (train_time, inf_time)
 
-
-def lazy_regressor(model_filename, X_train, X_test, Y_train, Y_test):
-    if FINE_TUNE == -1: # does not support actual fine-tuning (only test)
-        print(f"Loading model from {model_filename.replace('.keras', '.pkl')}...")
-        with open(model_filename.replace(".keras", ".pkl"), "rb") as f:
-            best_model = pickle.load(f)
-           
-            start = perf_counter()
-            scores = {"mean_absolute_error": mean_absolute_error(Y_test, best_model.predict(X_test))}
-            inf_time = perf_counter() - start
-            
-            scores_df = pd.DataFrame(scores, index=[selected_model])
-
-            return scores_df.iloc[0].mean_absolute_error, selected_model, (0, inf_time)
-
-    model = LazyRegressor(verbose=0, ignore_warnings=True, custom_metric=mean_absolute_error)
-    scores, _ = model.fit(X_train, X_test, Y_train, Y_test)
-    scores_df = pd.DataFrame(scores)
-
-    regressors_lst = dict(REGRESSORS)
-    best_model_name = scores_df.index[0]
-    best_model = regressors_lst[best_model_name]()
-
-    start = perf_counter()
-    best_model.fit(X_train, Y_train)
-    train_time = perf_counter() - start
-
-    print(f"Evaluating model {best_model_name}...")
-    start = perf_counter()
-    _ = best_model.predict(X_test)
-    inf_time = perf_counter() - start
-
-    with open(model_filename.replace(".keras", ".pkl"), "wb") as f:
-        pickle.dump(best_model, f)
-
-    print(f"Model saved to {model_filename.replace('.keras', '.pkl')}")
-
-    return scores_df.iloc[0].mean_absolute_error, best_model_name, (train_time, inf_time)
-
-
 available_models = {
     "ann": tf_ann_model,
     "lstm": tf_lstm_model,
     "cnn": tf_cnn_model,
-    "lazy": lazy_regressor,
 }
 
 input_filename = args.data_filepath.split("/")[-1].split(".")[0]
