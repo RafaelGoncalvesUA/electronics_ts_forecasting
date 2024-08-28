@@ -261,7 +261,8 @@ else:
 results = []
 
 for f in VARIABLES_TO_FORECAST:
-    model_filename = f"models/{selected_model}_{f}_l{LOOKBACK}_f{OUT_STEPS}_{''.join([str(a) for a in MODEL_ARGS])}.keras"
+    formatted_f = f.replace("/", "_")
+    model_filename = f"models/{selected_model}_{formatted_f}_l{LOOKBACK}_f{OUT_STEPS}_{''.join([str(a) for a in MODEL_ARGS])}.keras"
     train_data = [df.copy() for df in raw_train_data]
     test_data = raw_test_data.copy()
 
