@@ -20,6 +20,7 @@ import argparse
 from time import perf_counter
 from utils.vae import CustomVAE
 from utils.pca import CustomPCA
+from utils.windowing import WindowGenerator
 
 import pickle
 
@@ -126,17 +127,21 @@ def pd_test_preprocessing(df, to_forecast, scaler=None):
     return pd.DataFrame(df, columns=all_columns), scaler
 
 
-def tf_ann_model(model_filename, X_train, X_test, Y_train, Y_test):
-    return tf_model(model_filename, X_train, X_test, Y_train, Y_test, "ann")
+def tf_ann_model(model_filename, f, train_data, test_data):
+    return tf_model(model_filename, f, train_data, test_data, "ann")
 
+def tf_lstm_model(model_filename, f, train_data, test_data):
+    return tf_model(model_filename, f, train_data, test_data, "lstm")
 
-def tf_lstm_model(model_filename, X_train, X_test, Y_train, Y_test):
-    return tf_model(model_filename, X_train, X_test, Y_train, Y_test, "lstm")
+def tf_cnn_model(model_filename, f, train_data, test_data):
+    return tf_model(model_filename, f, train_data, test_data, "cnn")
 
-def tf_cnn_model(model_filename, X_train, X_test, Y_train, Y_test):
-    return tf_model(model_filename, X_train, X_test, Y_train, Y_test, "cnn")
-
-def tf_model(model_filename, X_train, X_test, Y_train, Y_test, model_type):
+def tf_model(model_filename, f, train_data, test_data, model_type):
+    X_train = train_data.drop([f"{f}_future{i}" for i in range(1, OUT_STEPS + 1)], axis=1)
+    Y_train = train_data[[f"{f}_future{i}" for i in range(1, OUT_STEPS + 1)]]
+    X_test = test_data.drop([f"{f}_future{i}" for i in range(1, OUT_STEPS + 1)], axis=1)
+    Y_test = test_data[[f"{f}_future{i}" for i in range(1, OUT_STEPS + 1)]]
+    
     num_columns = X_train.shape[1]
 
     if model_type == "ann":
@@ -162,7 +167,7 @@ def tf_model(model_filename, X_train, X_test, Y_train, Y_test, model_type):
     elif model_type == "cnn":
         model = tf.keras.Sequential([
             Lambda(lambda x: x[:, -3:, :]),
-            Conv1D(int(MODEL_ARGS[0]), activation='relu', kernel_size=(3), padding='same'),
+            Conv1D(int(MODEL_ARGS[0]), activation='relu', kernel_size=(3)),
             Dense(OUT_STEPS * num_columns, kernel_initializer=Zeros()),
             Reshape([OUT_STEPS, num_columns])
         ])
@@ -193,21 +198,20 @@ def tf_model(model_filename, X_train, X_test, Y_train, Y_test, model_type):
         ]
 
         if model_type in {'lstm', 'cnn'}:
-            X_train = np.array(X_train, dtype=np.float32)
-            Y_train = np.array(Y_train, dtype=np.float32)
 
-            X_train = np.reshape(X_train, (X_train.shape[0], 1, X_train.shape[1]))
-            X_test = np.reshape(X_test, (X_test.shape[0], 1, X_test.shape[1]))
-
-            X_train = tf.data.Dataset.from_tensor_slices(X_train)
-            Y_train = tf.data.Dataset.from_tensor_slices(Y_train)
+            data_window = WindowGenerator(
+                input_width=LOOKBACK,
+                label_width=OUT_STEPS,
+                label_columns=[f],
+                shift=OUT_STEPS,
+                train_df=train_data,
+                test_df=test_data
+            )
 
             start = perf_counter()
 
-            dataset = tf.data.Dataset.zip((X_train, Y_train)).batch(32)
-
             model.fit(
-                dataset,
+                data_window.train,
                 epochs=200,
                 verbose=1,
                 callbacks=callbacks,
@@ -293,12 +297,7 @@ for f in VARIABLES_TO_FORECAST:
 
         test_data = pca.predict(test_data)
 
-    X_train = train_data.drop([f"{f}_future{i}" for i in range(1, OUT_STEPS + 1)], axis=1)
-    Y_train = train_data[[f"{f}_future{i}" for i in range(1, OUT_STEPS + 1)]]
-    X_test = test_data.drop([f"{f}_future{i}" for i in range(1, OUT_STEPS + 1)], axis=1)
-    Y_test = test_data[[f"{f}_future{i}" for i in range(1, OUT_STEPS + 1)]]
-
-    mse, model_name, elapsed_time = available_models[selected_model](model_filename, X_train, X_test, Y_train, Y_test)
+    mse, model_name, elapsed_time = available_models[selected_model](model_filename, f, train_data, test_data)
 
     results.append(
         {
