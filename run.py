@@ -66,6 +66,28 @@ VARIABLES_TO_FORECAST = [
     "Carbon Intensity (kg_CO2/kWh)" # "carbon_intensity",
 ]
 
+
+def create_dataset(X, Y):
+    num_features = X.shape[1] // LOOKBACK
+    
+    new_X = np.zeros((X.shape[0], LOOKBACK, num_features))
+
+    for i in range(LOOKBACK):
+        new_X[:, i, :] = X.iloc[:, i * num_features : (i + 1) * num_features].values
+
+    X = new_X
+
+    Y = Y.values.reshape(-1, OUT_STEPS, 1)
+
+    # X has shape (samples, lookback, features)
+    # Y has shape (samples, forecast, 1)
+
+    # create batches of size 32
+    ds = tf.data.Dataset.from_tensor_slices((X, Y)).batch(32)
+
+    return ds
+
+
 def feature_engineering(df, to_forecast):
     columns = df.columns
 
@@ -197,51 +219,35 @@ def tf_model(model_filename, f, train_data, test_data, model_type):
             )
         ]
 
-        if model_type in {'lstm', 'cnn'}:
 
-            data_window = WindowGenerator(
-                input_width=LOOKBACK,
-                label_width=OUT_STEPS,
-                label_columns=[f],
-                shift=OUT_STEPS,
-                train_df=train_data,
-                test_df=test_data
-            )
+        ds = create_dataset(X_train, Y_train)
 
-            start = perf_counter()
+        start = perf_counter()
+ 
 
-            model.fit(
-                data_window.train,
-                epochs=200,
-                verbose=1,
-                callbacks=callbacks,
-            )
+        fit_args =  {"epochs": 200, "verbose": 1, "callbacks": callbacks}
 
-            train_time = perf_counter() - start
-
+        if model_type == "ann":
+            fit_args["x"] = X_train
+            fit_args["y"] = Y_train
         else:
-            start = perf_counter()
+            fit_args["x"] = ds
 
-            model.fit(
-                X_train,
-                Y_train,
-                epochs=200,
-                verbose=1,
-                callbacks=callbacks,
-            )
+        model.fit(**fit_args)
 
-            train_time = perf_counter() - start
+        train_time = perf_counter() - start
 
     print("Evaluating model...")
 
     start = perf_counter()
-    mse = model.evaluate(X_test, Y_test, verbose=0)[0]
+    
+    mse = model.evaluate(X_test, Y_test, verbose=0)[0] if model_type == "ann" \
+    else model.evaluate(create_dataset(X_test, Y_test), verbose=0)[0]
+
     inf_time = perf_counter() - start
 
     print(f"MSE: {mse}")
-
     model.save(model_filename)
-
     print(f"Model saved to {model_filename}")
 
     return mse, model_type, (train_time, inf_time)
