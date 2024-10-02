@@ -1,4 +1,6 @@
-keras
+keras==2.15.0
+tensorflow[and-cuda]
 pandas
 numpy
 scikit-learn
+matplotlib

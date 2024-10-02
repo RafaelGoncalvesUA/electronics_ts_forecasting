@@ -20,9 +20,6 @@ import argparse
 from time import perf_counter
 from utils.vae import CustomVAE
 from utils.pca import CustomPCA
-from utils.windowing import WindowGenerator
-
-import pickle
 
 parser = argparse.ArgumentParser()
 parser.add_argument("-d", "--data_filepath", type=str, required=True, help="Input data file (.csv)")
@@ -170,9 +167,9 @@ def tf_model(model_filename, f, train_data, test_data, model_type):
         model = Sequential(
             [
                 Dense(64, activation="relu", input_shape=(X_train.shape[1],)),
-                Dropout(0.35),
+                Dropout(int(MODEL_ARGS[0])),
                 Dense(32, activation="relu"),
-                Dropout(0.3),
+                Dropout(int(MODEL_ARGS[1])),
                 Dense(OUT_STEPS, activation="linear"),
             ]
         )
