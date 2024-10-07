@@ -1,2 +1,3 @@
 __pycache__/
 models/
+slurm_batch.sh

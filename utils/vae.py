@@ -11,7 +11,8 @@ import keras.backend as K
 tf.keras.utils.set_random_seed(42)
 
 def sampling(args):
-    z_mean, z_log_sigma, latent_dim = args
+    z_mean, z_log_sigma = args
+    latent_dim = K.int_shape(z_mean)[1]
     epsilon = K.random_normal(shape=(K.shape(z_mean)[0], latent_dim), mean=0., stddev=1.)
     return z_mean + K.exp(z_log_sigma) * epsilon
 
@@ -50,7 +51,7 @@ class CustomVAE():
         #--- Custom Latent Space Layer
         z_mean = Dense(units=dims[-1], name='Z-Mean')(x) # Mean component
         z_log_sigma = Dense(units=dims[-1], name='Z-Log-Sigma')(x) # Standard deviation component
-        z = Lambda(sampling, name='Z-Sampling-Layer')([z_mean, z_log_sigma, dims[-1]]) # Z sampling layer
+        z = Lambda(sampling, name='Z-Sampling-Layer')([z_mean, z_log_sigma]) # Z sampling layer
 
         latent_inputs = Input(shape=(dims[-1],), name='Input-Z-Sampling')
         x = latent_inputs
