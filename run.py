@@ -279,7 +279,7 @@ for f in VARIABLES_TO_FORECAST:
     if DIMENSIONALITY_REDUCTION == "vae":
         vae = CustomVAE(base_dir="models")
 
-        train_data = vae.fit(
+        train_data = vae.train(
             train_data,
             to_forecast=f,
             lookback=LOOKBACK,
@@ -302,8 +302,21 @@ for f in VARIABLES_TO_FORECAST:
 
     mse, model_name, elapsed_time = available_models[selected_model](model_filename, f, train_data, test_data)
 
+    buildings = {
+        "": -10,
+        "b1_global.csv": 0,
+        "b1_local.csv": 0,
+        "b2_global.csv": 1,
+        "b2_local.csv": 1,
+        "b3_global.csv": 2,
+        "b3_local.csv": 2,
+    }
+
     results.append(
         {
+            "mode": FINE_TUNE,
+            "building": buildings[input_filename],
+            "red": DIMENSIONALITY_REDUCTION,
             "var": f,
             "input": input_filename,
             "model": model_name,
